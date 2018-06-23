@@ -1,0 +1,100 @@
+# Predicting the manner in which an exercise is executed
+Practical Machine Learning course project
+
+by Ruja Babacheva
+
+June 22 2018
+
+### Synopsis
+My goal in this report is to fit a model to predict the manner in which the barbell lift exercise is done using training data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. The variable *classe* contains the manner - class A corresponds to the specified execution, classes B, C, D, E correspond to common mistakes. Then I used the model to predict the 20 test cases in the test data.
+I used 52 predictors and tried 3 models - decision tree, random forest and generalized boosted. The random forest model shows the best results and I applied it to predict the cases in test data.
+
+### Data source
+The data for this project come from this source: [http://groupware.les.inf.puc-rio.br/har]. Published:
+*Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13). Stuttgart, Germany: ACM SIGCHI, 2013*
+
+### Loading data
+``` {r}
+library(caret)
+urlTraining <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+training <- read.csv(url(urlTraining), na.strings=c("NA",""))
+dim(training)
+urlTesting <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+testing <- read.csv(url(urlTesting), na.strings=c("NA",""))
+dim(testing)
+```
+Both training and testing data have 160 variables.
+
+### Cross validation
+For building the model I use training data. I splitted it to train and test partitions.
+``` {r}
+set.seed(111)
+inTrain  <- createDataPartition(training$classe, p=0.7, list=FALSE)
+myTrain <- training[inTrain, ]
+myTest  <- training[-inTrain, ]
+dim(myTrain)
+dim(myTest)
+```
+
+### Cleaning data
+First I cleaned myTrain set, then I applied the same cleaning procedure to myTest.
+
+First 7 variables contain information useless for the model - row numbers, user names, time stamps, windows.
+``` {r}
+names(myTrain)[1:7]
+```
+So I removed them.
+```{r}
+myTrain <- myTrain[, -c(1:7)]
+```
+Next I removed the variables with too many NA's.
+``` {r}
+myTrain <- myTrain[, !colMeans(is.na(myTrain)>.9)]
+dim(myTrain)
+```
+Now in MyTrain left 53 variables.
+Also I checked for near zero variance variables.
+``` {r}
+nzv <- nearZeroVar(myTrain, saveMetrics=TRUE)
+myTrain <- myTrain[, nzv$nzv==FALSE]
+dim(myTrain)
+```
+There are not variables with near zero variance, so ultimately I use the set with 53 variables for building the models. I reduced the test partition myTest to the same 53 variables.
+``` {r}
+myTest <- myTest[, names(myTrain)]
+```
+### Building models
+I tried 3 models - decision tree, random forest and generalized boosted.
+
+Decision tree
+``` {r}
+modelDT <- train(classe ~., data= myTrain, method="rpart")
+predictDT <- predict(modelDT, myTest)
+confusionMatrix(predictDT, myTest$classe)
+```
+This model gives only 50% accuracy.
+
+Random forest
+``` {r}
+modelRF <- train(classe ~., data= myTrain, method="rf", trControl=trainControl(method = "cv", number = 3))
+predictRF <- predict(modelRF, myTest)
+confusionMatrix(predictRF, myTest$classe)
+```
+Random forest model gives more than 99% accuracy.
+
+Generalized boosted model
+``` {r}
+modelGBM <- train(classe ~., data= myTrain, method="gbm", trControl=trainControl(method="repeatedcv", number=3, repeats=2), verbose=FALSE)
+predictGBM <- predict(modelGBM, myTest)
+confusionMatrix(predictGBM, myTest$classe)
+```
+The accuracy with this model is 96%, a bit worse than random forest.
+
+### Results
+Although the random forest model takes more time it gives the best accuricy - almost 100%, so I choose this model to predict the 20 cases in testing data.
+``` {r}
+predictions <- predict(modelRF, newdata=testing)
+```
+My predictions are:
+`r predictions`
+
